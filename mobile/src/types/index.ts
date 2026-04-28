@@ -58,6 +58,10 @@ export interface DashboardData {
     percentage_change: number;
     top_categories: { category: string; total: number }[];
     pending_review: number;
+    plan_usage: {
+        count: number;
+        limit: number | null;
+    };
 }
 
 // Tipos para navegación
@@ -65,6 +69,7 @@ export type AuthStackParamList = {
     Onboarding: undefined;
     Login: undefined;
     Register: undefined;
+    ForgotPassword: undefined;
 };
 
 export type MainTabParamList = {

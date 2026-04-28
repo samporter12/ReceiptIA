@@ -51,6 +51,17 @@ export const generateViewPresignedUrl = async (
     return getSignedUrl(s3Client, command, { expiresIn: 3600 });
 };
 
+// Descarga una imagen de S3 como Buffer
+export const downloadFromS3 = async (imageKey: string): Promise<Buffer> => {
+    const command = new GetObjectCommand({ Bucket: BUCKET_NAME, Key: imageKey });
+    const response = await s3Client.send(command);
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+        chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+};
+
 // Elimina una imagen de S3
 export const deleteFromS3 = async (imageKey: string): Promise<void> => {
     const command = new DeleteObjectCommand({

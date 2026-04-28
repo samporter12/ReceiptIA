@@ -60,6 +60,16 @@ export const authService = {
     );
     return response.data;
   },
+
+  forgotPassword: async (email: string) => {
+    const url = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/recover`;
+    await axios.post(url, { email }, {
+      headers: {
+        'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!,
+        'Content-Type': 'application/json',
+      },
+    });
+  },
 };
 
 // =============================================
@@ -126,6 +136,19 @@ export const analyticsService = {
   getDashboard: async () => {
     const res = await api.get('/analytics/dashboard');
     return res.data.data;
+  },
+
+  exportCsv: async (): Promise<string> => {
+    const res = await api.get('/analytics/export-csv', { responseType: 'text' });
+    return res.data as string;
+  },
+
+  exportPdf: async (): Promise<string> => {
+    const res = await api.get('/analytics/export-pdf', { responseType: 'arraybuffer' });
+    const bytes = new Uint8Array(res.data as ArrayBuffer);
+    let binary = '';
+    bytes.forEach((b) => (binary += String.fromCharCode(b)));
+    return btoa(binary);
   },
 };
 

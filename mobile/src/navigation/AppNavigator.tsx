@@ -13,6 +13,7 @@ import { RootStackParamList, MainTabParamList, AuthStackParamList } from '../typ
 import OnboardingScreen from '../screens/auth/OnboardingScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
+import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 
 // Screens - Main
 import DashboardScreen from '../screens/main/DashboardScreen';
@@ -31,6 +32,7 @@ const AuthNavigator = () => (
         <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
         <AuthStack.Screen name="Login" component={LoginScreen} />
         <AuthStack.Screen name="Register" component={RegisterScreen} />
+        <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </AuthStack.Navigator>
 );
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Image,
-  TouchableOpacity, ActivityIndicator, Alert,
+  TouchableOpacity, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
@@ -81,6 +81,26 @@ export default function ReceiptDetailScreen() {
         </View>
     );
 
+    const EditField = ({ label, value, onChangeText, keyboardType = 'default', placeholder }: {
+        label: string;
+        value: string;
+        onChangeText: (v: string) => void;
+        keyboardType?: 'default' | 'numeric';
+        placeholder?: string;
+    }) => (
+        <View style={styles.field}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        <TextInput
+            style={styles.fieldInput}
+            value={value}
+            onChangeText={onChangeText}
+            placeholder={placeholder}
+            placeholderTextColor={Colors.textMuted}
+            keyboardType={keyboardType}
+        />
+        </View>
+    );
+
     return (
         <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
@@ -116,46 +136,91 @@ export default function ReceiptDetailScreen() {
             </TouchableOpacity>
             </View>
 
-            <Field label="Comercio" value={receipt.merchant_name || ''} />
-            <Field label="Fecha" value={receipt.receipt_date
-            ? format(new Date(receipt.receipt_date), 'd MMMM yyyy', { locale: es })
-            : ''} />
-            <Field label="Total" value={receipt.total_amount != null
-            ? `${receipt.currency} ${receipt.total_amount.toFixed(2)}`
-            : ''} />
-            <Field label="IVA/Impuesto" value={receipt.tax_amount != null
-            ? `${receipt.currency} ${receipt.tax_amount.toFixed(2)}`
-            : ''} />
-
-            {/* Categoría */}
-            <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Categoría</Text>
-            <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '20' }]}>
-                <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
-                <Text style={[styles.categoryText, { color: categoryColor }]}>
-                {receipt.category || 'Sin categoría'}
-                </Text>
-            </View>
-            </View>
-
-            {/* Confianza de la IA */}
-            {receipt.confidence_score != null && (
-            <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Confianza IA</Text>
-                <View style={styles.confidenceBar}>
-                <View style={[styles.confidenceFill, {
-                    width: `${receipt.confidence_score * 100}%` as any,
-                    backgroundColor: receipt.confidence_score > 0.8 ? Colors.success : Colors.warning,
-                }]} />
+            {editMode ? (
+            <>
+                <EditField
+                label="Comercio"
+                value={editData.merchant_name || ''}
+                onChangeText={(v) => setEditData(prev => ({ ...prev, merchant_name: v }))}
+                placeholder="Nombre del comercio"
+                />
+                <EditField
+                label="Fecha (YYYY-MM-DD)"
+                value={editData.receipt_date || ''}
+                onChangeText={(v) => setEditData(prev => ({ ...prev, receipt_date: v }))}
+                placeholder="2024-01-15"
+                />
+                <EditField
+                label="Total"
+                value={editData.total_amount != null ? String(editData.total_amount) : ''}
+                onChangeText={(v) => setEditData(prev => ({ ...prev, total_amount: v ? parseFloat(v) : undefined }))}
+                keyboardType="numeric"
+                placeholder="0.00"
+                />
+                <EditField
+                label="IVA/Impuesto"
+                value={editData.tax_amount != null ? String(editData.tax_amount) : ''}
+                onChangeText={(v) => setEditData(prev => ({ ...prev, tax_amount: v ? parseFloat(v) : undefined }))}
+                keyboardType="numeric"
+                placeholder="0.00"
+                />
+                <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Categoría</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+                    {CATEGORIES.map((cat) => {
+                    const isSelected = editData.category === cat;
+                    return (
+                        <TouchableOpacity
+                        key={cat}
+                        style={[styles.catChip, isSelected && styles.catChipActive]}
+                        onPress={() => setEditData(prev => ({ ...prev, category: cat }))}
+                        >
+                        <Text style={[styles.catChipText, isSelected && styles.catChipTextActive]}>{cat}</Text>
+                        </TouchableOpacity>
+                    );
+                    })}
+                </ScrollView>
                 </View>
-                <Text style={styles.confidenceText}>
-                {Math.round(receipt.confidence_score * 100)}%
-                </Text>
-            </View>
-            )}
+                <Button title="Guardar cambios" onPress={handleSave} loading={saving} style={{ marginTop: Spacing.md }} />
+            </>
+            ) : (
+            <>
+                <Field label="Comercio" value={receipt.merchant_name || ''} />
+                <Field label="Fecha" value={receipt.receipt_date
+                ? format(new Date(receipt.receipt_date), 'd MMMM yyyy', { locale: es })
+                : ''} />
+                <Field label="Total" value={receipt.total_amount != null
+                ? `${receipt.currency} ${receipt.total_amount.toFixed(2)}`
+                : ''} />
+                <Field label="IVA/Impuesto" value={receipt.tax_amount != null
+                ? `${receipt.currency} ${receipt.tax_amount.toFixed(2)}`
+                : ''} />
 
-            {editMode && (
-            <Button title="Guardar cambios" onPress={handleSave} loading={saving} style={{ marginTop: Spacing.md }} />
+                <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Categoría</Text>
+                <View style={[styles.categoryBadge, { backgroundColor: categoryColor + '20' }]}>
+                    <View style={[styles.categoryDot, { backgroundColor: categoryColor }]} />
+                    <Text style={[styles.categoryText, { color: categoryColor }]}>
+                    {receipt.category || 'Sin categoría'}
+                    </Text>
+                </View>
+                </View>
+
+                {receipt.confidence_score != null && (
+                <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>Confianza IA</Text>
+                    <View style={styles.confidenceBar}>
+                    <View style={[styles.confidenceFill, {
+                        width: `${receipt.confidence_score * 100}%` as any,
+                        backgroundColor: receipt.confidence_score > 0.8 ? Colors.success : Colors.warning,
+                    }]} />
+                    </View>
+                    <Text style={styles.confidenceText}>
+                    {Math.round(receipt.confidence_score * 100)}%
+                    </Text>
+                </View>
+                )}
+            </>
             )}
         </View>
 
@@ -194,4 +259,18 @@ const styles = StyleSheet.create({
     confidenceBar: { height: 8, backgroundColor: Colors.border, borderRadius: 4, overflow: 'hidden', marginVertical: 4 },
     confidenceFill: { height: '100%', borderRadius: 4 },
     confidenceText: { fontSize: FontSize.xs, color: Colors.textSecondary },
+    fieldInput: {
+        fontSize: FontSize.md, color: Colors.textPrimary, fontWeight: '500',
+        borderWidth: 1, borderColor: Colors.border, borderRadius: BorderRadius.sm,
+        paddingHorizontal: 10, paddingVertical: 8, backgroundColor: Colors.background,
+    },
+    categoryScroll: { marginTop: 6 },
+    catChip: {
+        paddingHorizontal: 12, paddingVertical: 6, borderRadius: BorderRadius.full,
+        backgroundColor: Colors.background, borderWidth: 1, borderColor: Colors.border,
+        marginRight: 8,
+    },
+    catChipActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+    catChipText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
+    catChipTextActive: { color: 'white' },
 });

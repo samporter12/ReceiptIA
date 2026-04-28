@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../services/supabaseClient';
 import { generateUploadPresignedUrl, generateViewPresignedUrl, deleteFromS3 } from '../services/s3Client';
 import { processReceiptImage } from '../services/ocrService';
 import { sendSuccess, sendError } from '../utils/apiResponse';
+import { sendPushNotification } from '../services/notificationService';
 import logger from '../utils/logger';
 
 const router: Router = Router();
@@ -117,6 +118,20 @@ router.post('/upload-url', checkPlanLimits, async (req: Request, res: Response) 
 
         // Incrementar contador mensual
         await supabaseAdmin.rpc('increment_receipt_count', { user_id: userId });
+
+        // Notificación push
+        const merchant = extracted.merchant_name || 'Recibo';
+        const amount = extracted.total_amount != null
+            ? ` — ${extracted.currency} ${extracted.total_amount.toFixed(2)}`
+            : '';
+        await sendPushNotification(
+            userId,
+            status === 'review' ? '⚠️ Recibo requiere revisión' : '✅ Recibo procesado',
+            status === 'review'
+                ? `${merchant} necesita revisión manual`
+                : `${merchant}${amount} procesado correctamente`,
+            { receiptId }
+        );
 
         logger.info(`✅ Recibo ${receiptId} — status: ${status}, confidence: ${extracted.confidence}`);
 

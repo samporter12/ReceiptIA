@@ -1,12 +1,16 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Linking, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { cacheDirectory, writeAsStringAsync, EncodingType } from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '../../store/AuthContext';
+import { analyticsService } from '../../services/api';
 import { Colors, FontSize, Spacing, BorderRadius } from '../../utils/theme';
 import { Card } from '../../components/ui/card';
 
 export default function ProfileScreen() {
     const { user, logout } = useAuth();
+    const [exporting, setExporting] = useState(false);
 
     const handleLogout = () => {
         Alert.alert('Cerrar sesión', '¿Estás seguro?', [
@@ -15,11 +19,42 @@ export default function ProfileScreen() {
         ]);
     };
 
+    const handleExport = async () => {
+        if (exporting) return;
+        setExporting(true);
+        try {
+            const csv = await analyticsService.exportCsv();
+            await Share.share({ message: csv, title: 'Mis recibos — ReceiptAI' });
+        } catch {
+            Alert.alert('Error', 'No se pudo exportar. Intenta de nuevo.');
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const handleExportPdf = async () => {
+        if (exporting) return;
+        setExporting(true);
+        try {
+            const base64 = await analyticsService.exportPdf();
+            const fileUri = (cacheDirectory ?? '') + 'recibos_receiptai.pdf';
+            await writeAsStringAsync(fileUri, base64, { encoding: EncodingType.Base64 });
+            await Sharing.shareAsync(fileUri, {
+                mimeType: 'application/pdf',
+                dialogTitle: 'Exportar recibos',
+            });
+        } catch {
+            Alert.alert('Error', 'No se pudo generar el PDF. Intenta de nuevo.');
+        } finally {
+            setExporting(false);
+        }
+    };
+
     const menuItems = [
         { icon: 'star-outline', label: 'Actualizar a Pro', color: Colors.warning, action: () => {} },
-        { icon: 'download-outline', label: 'Exportar datos', color: Colors.primary, action: () => {} },
-        { icon: 'shield-outline', label: 'Privacidad y seguridad', color: Colors.success, action: () => {} },
-        { icon: 'help-circle-outline', label: 'Ayuda y soporte', color: Colors.info, action: () => {} },
+        { icon: 'document-text-outline', label: exporting ? 'Generando PDF…' : 'Exportar PDF', color: Colors.primary, action: handleExportPdf },
+        { icon: 'shield-outline', label: 'Privacidad y seguridad', color: Colors.success, action: () => Linking.openURL('https://receiptai.app/privacidad') },
+        { icon: 'help-circle-outline', label: 'Ayuda y soporte', color: Colors.info, action: () => Linking.openURL('mailto:soporte@receiptai.app') },
         { icon: 'log-out-outline', label: 'Cerrar sesión', color: Colors.error, action: handleLogout },
     ];
 

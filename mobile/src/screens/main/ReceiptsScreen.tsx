@@ -18,6 +18,7 @@ export default function ReceiptsScreen() {
     const [receipts, setReceipts] = useState<Receipt[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState(false);
     const [search, setSearch] = useState('');
     const [activeCategory, setActiveCategory] = useState<string | null>(null);
     const [page, setPage] = useState(1);
@@ -25,6 +26,7 @@ export default function ReceiptsScreen() {
 
     const loadReceipts = useCallback(async (reset = false) => {
         try {
+        setError(false);
         const currentPage = reset ? 1 : page;
         const res = await receiptService.getReceipts({
             page: currentPage, limit: 20,
@@ -43,6 +45,7 @@ export default function ReceiptsScreen() {
         setHasMore(newReceipts.length === 20);
         } catch (err) {
         console.error('Error loading receipts:', err);
+        setError(true);
         } finally {
         setLoading(false);
         setRefreshing(false);
@@ -104,6 +107,15 @@ export default function ReceiptsScreen() {
         {/* Lista */}
         {loading ? (
             <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 40 }} />
+        ) : error ? (
+            <View style={styles.empty}>
+                <Ionicons name="wifi-outline" size={64} color={Colors.border} />
+                <Text style={styles.emptyTitle}>Sin conexión</Text>
+                <Text style={styles.emptyText}>No se pudieron cargar los recibos</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={() => loadReceipts(true)}>
+                    <Text style={styles.retryBtnText}>Reintentar</Text>
+                </TouchableOpacity>
+            </View>
         ) : (
             <FlatList
             data={receipts}
@@ -157,4 +169,6 @@ const styles = StyleSheet.create({
     empty: { alignItems: 'center', paddingTop: 60 },
     emptyTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.textPrimary, marginTop: Spacing.lg },
     emptyText: { fontSize: FontSize.md, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
+    retryBtn: { marginTop: Spacing.lg, backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: BorderRadius.md },
+    retryBtnText: { color: 'white', fontWeight: '700', fontSize: FontSize.md },
 });

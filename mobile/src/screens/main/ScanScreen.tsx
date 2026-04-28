@@ -103,9 +103,15 @@ export default function ScanScreen() {
     } catch (err: any) {
         console.error('❌ Error procesando imagen:', err);
         setStep('preview');
+        const isNetworkError = !err?.response && err?.message;
+        const message = err?.response?.data?.error || err?.message || 'Intenta de nuevo';
         Alert.alert(
-        'Error al procesar',
-        err?.response?.data?.error || err?.message || 'Intenta de nuevo'
+        isNetworkError ? 'Sin conexión' : 'Error al procesar',
+        message,
+        [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Reintentar', onPress: processImage },
+        ]
         );
     }
 }, [capturedUri, navigation]);

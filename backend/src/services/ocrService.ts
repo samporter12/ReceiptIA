@@ -1,8 +1,9 @@
 import {
   TextractClient,
   AnalyzeExpenseCommand,
+  DetectDocumentTextCommand,
 } from '@aws-sdk/client-textract';
-import Groq from 'groq-sdk';
+import Anthropic from '@anthropic-ai/sdk';
 import { ExtractedReceiptData, ReceiptCategory } from '../types';
 import logger from '../utils/logger';
 
@@ -17,7 +18,7 @@ const textractClient = new TextractClient({
   },
 });
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 
 
 const CATEGORIES: ReceiptCategory[] = [
@@ -26,18 +27,11 @@ const CATEGORIES: ReceiptCategory[] = [
 ];
 
 // =============================================
-// PASO 1: AWS TEXTRACT
+// PASO 1A: Textract AnalyzeExpense (recibos físicos)
 // =============================================
-const extractWithTextract = async (imageKey: string): Promise<string> => {
-  logger.info(`📄 Textract procesando: ${imageKey}`);
-
+const extractWithAnalyzeExpense = async (imageKey: string): Promise<string> => {
   const command = new AnalyzeExpenseCommand({
-    Document: {
-      S3Object: {
-        Bucket: process.env.S3_BUCKET_NAME!,
-        Name: imageKey,
-      },
-    },
+    Document: { S3Object: { Bucket: process.env.S3_BUCKET_NAME!, Name: imageKey } },
   });
 
   const response = await textractClient.send(command);
@@ -48,49 +42,103 @@ const extractWithTextract = async (imageKey: string): Promise<string> => {
       const label = field.LabelDetection?.Text || '';
       const value = field.ValueDetection?.Text || '';
       const confidence = field.ValueDetection?.Confidence || 0;
-      if (value && confidence > 50) {
-        lines.push(`${label}: ${value}`);
-      }
+      if (value && confidence > 50) lines.push(`${label}: ${value}`);
     });
 
     doc.LineItemGroups?.forEach((group) => {
       group.LineItems?.forEach((item) => {
         const parts: string[] = [];
         item.LineItemExpenseFields?.forEach((field) => {
-          if (field.ValueDetection?.Text) {
-            parts.push(field.ValueDetection.Text);
-          }
+          if (field.ValueDetection?.Text) parts.push(field.ValueDetection.Text);
         });
         if (parts.length) lines.push(`ITEM: ${parts.join(' | ')}`);
       });
     });
   });
 
-  const rawText = lines.join('\n');
-  logger.info(`📄 Textract extrajo ${lines.length} líneas`);
-  return rawText;
+  return lines.join('\n');
 };
 
 // =============================================
-// PASO 2: GEMINI
+// PASO 1B: Textract DetectDocumentText (comprobantes digitales)
+// =============================================
+const extractWithDetectText = async (imageKey: string): Promise<string> => {
+  const command = new DetectDocumentTextCommand({
+    Document: { S3Object: { Bucket: process.env.S3_BUCKET_NAME!, Name: imageKey } },
+  });
+
+  const response = await textractClient.send(command);
+  const lines: string[] = [];
+
+  response.Blocks?.forEach((block) => {
+    if (block.BlockType === 'LINE' && block.Text && (block.Confidence ?? 0) > 50) {
+      lines.push(block.Text);
+    }
+  });
+
+  return lines.join('\n');
+};
+
+// =============================================
+// PASO 1: Orquestador — detecta tipo de comprobante
+// =============================================
+const DIGITAL_KEYWORDS = [
+  'nequi', 'bancolombia', 'daviplata', 'movii', 'rappipay',
+  'transferencia', 'comprobante', 'transacción exitosa', 'enviaste',
+  'recibiste', 'pago exitoso', 'aprobada', 'referencia',
+];
+
+const isDigitalReceipt = (text: string): boolean => {
+  const lower = text.toLowerCase();
+  return DIGITAL_KEYWORDS.some((kw) => lower.includes(kw));
+};
+
+const extractWithTextract = async (imageKey: string): Promise<string> => {
+  logger.info(`📄 Textract procesando: ${imageKey}`);
+
+  const expenseText = await extractWithAnalyzeExpense(imageKey);
+  const expenseLines = expenseText.split('\n').filter(Boolean).length;
+
+  // Si AnalyzeExpense extrajo poco texto o parece comprobante digital, usar DetectText
+  if (expenseLines < 4 || isDigitalReceipt(expenseText)) {
+    logger.info(`📱 Detectado posible comprobante digital (${expenseLines} líneas en AnalyzeExpense) — usando DetectText`);
+    const rawText = await extractWithDetectText(imageKey);
+    logger.info(`📄 DetectText extrajo ${rawText.split('\n').filter(Boolean).length} líneas`);
+    return rawText;
+  }
+
+  logger.info(`📄 AnalyzeExpense extrajo ${expenseLines} líneas`);
+  return expenseText;
+};
+
+// =============================================
+// PASO 2: LLM
 // =============================================
 const enrichWithLLM = async (rawText: string): Promise<ExtractedReceiptData> => {
   logger.info('🤖 Enviando a Groq para enriquecimiento...');
 
-  const prompt = `Eres un extractor experto de recibos fiscales latinoamericanos.
+  const prompt = `Eres un extractor experto de comprobantes de pago latinoamericanos, tanto recibos físicos como comprobantes digitales (Nequi, Bancolombia, Daviplata, transferencias bancarias, pagos QR, etc.).
 
-Analiza el siguiente texto extraído por OCR de un recibo y extrae datos estructurados.
+Analiza el siguiente texto extraído por OCR y extrae datos estructurados.
 
-REGLAS:
+REGLAS GENERALES:
 1. Corrige errores tipográficos del OCR
 2. La fecha debe estar en formato ISO8601: YYYY-MM-DD
-3. Los montos deben ser números decimales sin símbolo de moneda
-4. La moneda como código ISO (USD, EUR, COP, MXN, etc.)
+3. Los montos deben ser números decimales sin símbolo de moneda ni puntos de miles (ej: 45000.00)
+4. La moneda como código ISO (COP, USD, EUR, MXN, etc.). Si no se especifica y parece colombiano, usa COP
 5. La categoría DEBE ser exactamente una de: ${CATEGORIES.join(', ')}
 6. confidence: qué tan seguro estás (0.0 a 1.0)
-7. needs_review: true si el recibo es ilegible o tiene datos contradictorios
+7. needs_review: true si el texto es ilegible o faltan datos críticos
 
-TEXTO DEL RECIBO:
+REGLAS PARA COMPROBANTES DIGITALES:
+- Si dice "Enviaste $X a [nombre]" → merchant_name = nombre del destinatario, categoría = Transporte o Otro
+- Si dice "Pagaste en [comercio]" → merchant_name = nombre del comercio
+- Si dice "Recarga" o "recargar" → categoría = Otro
+- El monto principal es el que aparece más destacado o junto a "Total", "Valor", "Monto"
+- Ignora montos de comisión o IVA de plataforma a menos que sean el único monto
+- En transferencias entre personas, needs_review = false si el monto es claro
+
+TEXTO DEL COMPROBANTE:
 ${rawText}
 
 Responde ÚNICAMENTE con JSON válido, sin markdown, sin texto adicional:
@@ -105,15 +153,14 @@ Responde ÚNICAMENTE con JSON válido, sin markdown, sin texto adicional:
   "needs_review": false
 }`;
 
-  // ✅ Llamada a Groq
-  const completion = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+  const completion = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 400,
+    system: 'Eres un extractor experto de comprobantes de pago latinoamericanos. Responde ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.',
     messages: [{ role: 'user', content: prompt }],
-    temperature: 0.1,
-    max_tokens: 300,
   });
 
-  const responseText = completion.choices[0]?.message?.content || '{}';
+  const responseText = completion.content[0]?.type === 'text' ? completion.content[0].text : '{}';
   logger.debug(`🤖 Respuesta Groq: ${responseText}`);
 
   try {

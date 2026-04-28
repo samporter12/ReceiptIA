@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView,
-    RefreshControl, TouchableOpacity,
+    RefreshControl, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,13 +18,16 @@ export default function DashboardScreen() {
     const [data, setData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
+        setError(false);
         const dashboard = await analyticsService.getDashboard();
         setData(dashboard);
         } catch (err) {
         console.error('Error loading dashboard:', err);
+        setError(true);
         } finally {
         setLoading(false);
         setRefreshing(false);
@@ -37,6 +40,23 @@ export default function DashboardScreen() {
 
     const changeIcon = (data?.percentage_change ?? 0) >= 0 ? 'trending-up' : 'trending-down';
     const changeColor = (data?.percentage_change ?? 0) >= 0 ? Colors.error : Colors.success;
+
+    if (loading) return (
+        <View style={styles.centered}>
+            <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+    );
+
+    if (error) return (
+        <View style={styles.centered}>
+            <Ionicons name="wifi-outline" size={64} color={Colors.border} />
+            <Text style={styles.errorTitle}>Sin conexión</Text>
+            <Text style={styles.errorText}>No se pudieron cargar los datos</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={loadData}>
+                <Text style={styles.retryBtnText}>Reintentar</Text>
+            </TouchableOpacity>
+        </View>
+    );
 
     return (
         <ScrollView
@@ -77,7 +97,20 @@ export default function DashboardScreen() {
         </LinearGradient>
 
         <View style={styles.body}>
-            {/* Stats rápidas */}
+            {/* Banner 80% plan Free */}
+        {data?.plan_usage?.limit && data.plan_usage.count >= Math.floor(data.plan_usage.limit * 0.8) && (
+            <View style={styles.usageWarning}>
+            <Ionicons name="alert-circle" size={18} color={Colors.warning} />
+            <Text style={styles.usageWarningText}>
+                Usaste {data.plan_usage.count}/{data.plan_usage.limit} recibos del mes.{' '}
+                {data.plan_usage.count >= data.plan_usage.limit
+                ? '¡Límite alcanzado! Actualiza a Pro.'
+                : 'Considera actualizar a Pro.'}
+            </Text>
+            </View>
+        )}
+
+        {/* Stats rápidas */}
             <View style={styles.statsRow}>
             {[
                 { label: 'Recibos', value: data?.current_month.receipt_count ?? 0, icon: 'receipt-outline', color: Colors.primary },
@@ -174,4 +207,16 @@ const styles = StyleSheet.create({
     scanCta: { borderRadius: BorderRadius.lg, overflow: 'hidden', ...Shadow.medium },
     scanCtaInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, padding: Spacing.lg },
     scanCtaText: { color: 'white', fontSize: FontSize.lg, fontWeight: '700' },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.background, padding: Spacing.xl },
+    errorTitle: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.textPrimary, marginTop: Spacing.lg },
+    errorText: { fontSize: FontSize.md, color: Colors.textSecondary, marginTop: 4, textAlign: 'center' },
+    retryBtn: { marginTop: Spacing.lg, backgroundColor: Colors.primary, paddingHorizontal: 24, paddingVertical: 10, borderRadius: BorderRadius.md },
+    retryBtnText: { color: 'white', fontWeight: '700', fontSize: FontSize.md },
+    usageWarning: {
+        flexDirection: 'row', alignItems: 'center', gap: 8,
+        backgroundColor: Colors.warning + '18', marginBottom: Spacing.md,
+        padding: Spacing.md, borderRadius: BorderRadius.md,
+        borderWidth: 1, borderColor: Colors.warning + '40',
+    },
+    usageWarningText: { flex: 1, fontSize: FontSize.sm, color: Colors.warning, fontWeight: '600' },
 });

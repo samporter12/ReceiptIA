@@ -102,6 +102,13 @@ export default function LoginScreen({ navigation }: Props) {
                 style={{ marginTop: Spacing.lg }}
             />
 
+            <TouchableOpacity
+                style={styles.forgotBtn}
+                onPress={() => navigation.navigate('ForgotPassword')}
+            >
+                <Text style={styles.forgotText}>¿Olvidaste tu contraseña?</Text>
+            </TouchableOpacity>
+
             <View style={styles.divider}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>¿No tienes cuenta?</Text>
@@ -145,4 +152,6 @@ const styles = StyleSheet.create({
     divider: { flexDirection: 'row', alignItems: 'center', marginVertical: Spacing.lg },
     dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
     dividerText: { marginHorizontal: Spacing.sm, color: Colors.textSecondary, fontSize: FontSize.sm },
+    forgotBtn: { alignSelf: 'flex-end', marginTop: Spacing.sm },
+    forgotText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
 });
