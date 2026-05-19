@@ -5,7 +5,7 @@ const REQUIRED_VARS = [
   'S3_BUCKET_NAME',
   'SUPABASE_URL',
   'SUPABASE_SERVICE_ROLE_KEY',
-  'ANTHROPIC_API_KEY',
+  'GROQ_API_KEY',
 ] as const;
 
 export const validateEnv = (): void => {
