@@ -118,7 +118,7 @@ export default function ScanPage() {
   // ─── Vista: Procesando ───
   if (step === 'processing') {
     return (
-      <div className="min-h-screen bg-primary-dark flex flex-col items-center justify-center gap-6 text-white p-8">
+      <div className="fixed inset-0 z-50 bg-primary-dark flex flex-col items-center justify-center gap-6 text-white p-8">
         <Spinner size="lg" color="text-white" />
         <h2 className="text-2xl font-black">Analizando recibo...</h2>
         <p className="text-white/70 text-center">La IA está extrayendo los datos del recibo</p>
@@ -129,7 +129,7 @@ export default function ScanPage() {
   // ─── Vista: Éxito ───
   if (step === 'success') {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-8">
+      <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center gap-6 p-8">
         <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center">
           <Check size={40} className="text-success" />
         </div>
@@ -153,7 +153,7 @@ export default function ScanPage() {
   // ─── Vista: Preview ───
   if (step === 'preview' && previewUrl) {
     return (
-      <div className="min-h-screen bg-black flex flex-col">
+      <div className="fixed inset-0 z-50 bg-black flex flex-col">
         {/* Imagen capturada */}
         <div className="flex-1 flex items-center justify-center">
           <img
@@ -193,15 +193,15 @@ export default function ScanPage() {
 
   // ─── Vista: Cámara ───
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
       {/* Video */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative overflow-hidden min-h-0">
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover"
         />
         <canvas ref={canvasRef} className="hidden" />
 

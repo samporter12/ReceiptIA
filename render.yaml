@@ -15,8 +15,14 @@ services:
       - key: API_VERSION
         value: v1
       # Las siguientes variables se configuran manualmente en el dashboard:
-      # AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+      # SUPABASE_URL
+      # SUPABASE_ANON_KEY
+      # SUPABASE_SERVICE_ROLE_KEY
+      # AWS_REGION
+      # AWS_ACCESS_KEY_ID
+      # AWS_SECRET_ACCESS_KEY
       # S3_BUCKET_NAME
-      # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-      # ANTHROPIC_API_KEY
-      # FRONTEND_URL (dominio de la app en producción)
+      # GROQ_API_KEY          ← LLM principal
+      # GEMINI_API_KEY        ← LLM fallback
+      # JWT_SECRET
+      # FRONTEND_URL          ← URL del frontend en producción (para CORS)

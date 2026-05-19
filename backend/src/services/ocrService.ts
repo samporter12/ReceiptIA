@@ -3,7 +3,8 @@ import {
   AnalyzeExpenseCommand,
   DetectDocumentTextCommand,
 } from '@aws-sdk/client-textract';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ExtractedReceiptData, ReceiptCategory } from '../types';
 import logger from '../utils/logger';
 
@@ -18,7 +19,14 @@ const textractClient = new TextractClient({
   },
 });
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+// Groq — LLM principal (API compatible con OpenAI, tier gratuito)
+const groq = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY!,
+  baseURL: 'https://api.groq.com/openai/v1',
+});
+
+// Gemini — fallback si Groq falla
+const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 
 const CATEGORIES: ReceiptCategory[] = [
@@ -112,12 +120,20 @@ const extractWithTextract = async (imageKey: string): Promise<string> => {
 };
 
 // =============================================
-// PASO 2: LLM
+// PASO 2: Helpers LLM
 // =============================================
-const enrichWithLLM = async (rawText: string): Promise<ExtractedReceiptData> => {
-  logger.info('🤖 Enviando a Groq para enriquecimiento...');
+const FALLBACK_RESULT: ExtractedReceiptData = {
+  merchant_name: null,
+  date: null,
+  total_amount: null,
+  tax_amount: null,
+  currency: 'COP',
+  category: 'Otro',
+  confidence: 0,
+  needs_review: true,
+};
 
-  const prompt = `Eres un extractor experto de comprobantes de pago latinoamericanos, tanto recibos físicos como comprobantes digitales (Nequi, Bancolombia, Daviplata, transferencias bancarias, pagos QR, etc.).
+const buildPrompt = (rawText: string): string => `Eres un extractor experto de comprobantes de pago latinoamericanos, tanto recibos físicos como comprobantes digitales (Nequi, Bancolombia, Daviplata, transferencias bancarias, pagos QR, etc.).
 
 Analiza el siguiente texto extraído por OCR y extrae datos estructurados.
 
@@ -153,51 +169,84 @@ Responde ÚNICAMENTE con JSON válido, sin markdown, sin texto adicional:
   "needs_review": false
 }`;
 
-  const completion = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+const parseResponse = (responseText: string): ExtractedReceiptData => {
+  const clean = responseText
+    .replace(/```json\n?/gi, '')
+    .replace(/```\n?/g, '')
+    .trim();
+
+  const extracted = JSON.parse(clean) as ExtractedReceiptData;
+
+  if (
+    extracted.tax_amount !== null &&
+    extracted.total_amount !== null &&
+    extracted.tax_amount > extracted.total_amount
+  ) {
+    extracted.needs_review = true;
+    extracted.confidence = Math.min(extracted.confidence, 0.4);
+  }
+
+  if (extracted.confidence < 0.6) extracted.needs_review = true;
+
+  return extracted;
+};
+
+// Groq (principal)
+const enrichWithGroq = async (rawText: string): Promise<ExtractedReceiptData> => {
+  logger.info('🤖 Enviando a Groq (llama-3.3-70b) para enriquecimiento...');
+  const completion = await groq.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
     max_tokens: 400,
-    system: 'Eres un extractor experto de comprobantes de pago latinoamericanos. Responde ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.',
-    messages: [{ role: 'user', content: prompt }],
+    temperature: 0.1,
+    messages: [
+      {
+        role: 'system',
+        content: 'Eres un extractor experto de comprobantes de pago latinoamericanos. Responde ÚNICAMENTE con JSON válido, sin markdown ni texto adicional.',
+      },
+      { role: 'user', content: buildPrompt(rawText) },
+    ],
   });
 
-  const responseText = completion.content[0]?.type === 'text' ? completion.content[0].text : '{}';
-  logger.debug(`🤖 Respuesta Groq: ${responseText}`);
+  const responseText = completion.choices[0]?.message?.content ?? '{}';
+  logger.debug(`🤖 Respuesta Groq: ${responseText.slice(0, 200)}`);
+  return parseResponse(responseText);
+};
 
+// Gemini Flash (fallback)
+const enrichWithGemini = async (rawText: string): Promise<ExtractedReceiptData> => {
+  logger.info('🤖 Fallback a Gemini Flash para enriquecimiento...');
+  const model = gemini.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const result = await model.generateContent(buildPrompt(rawText));
+  const responseText = result.response.text();
+  logger.debug(`🤖 Respuesta Gemini: ${responseText.slice(0, 200)}`);
+  return parseResponse(responseText);
+};
+
+// =============================================
+// PASO 2: Orquestador LLM con fallback
+// =============================================
+const enrichWithLLM = async (rawText: string): Promise<ExtractedReceiptData> => {
+  // Intento 1: Groq
   try {
-    const clean = responseText
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
-
-    const extracted = JSON.parse(clean) as ExtractedReceiptData;
-
-    if (
-      extracted.tax_amount !== null &&
-      extracted.total_amount !== null &&
-      extracted.tax_amount > extracted.total_amount
-    ) {
-      extracted.needs_review = true;
-      extracted.confidence = Math.min(extracted.confidence, 0.4);
-    }
-
-    if (extracted.confidence < 0.6) extracted.needs_review = true;
-
-    logger.info(`🤖 Extracción completada — confidence: ${extracted.confidence}`);
-    return extracted;
-
-  } catch (parseError) {
-    logger.error('❌ Error parseando respuesta', { responseText });
-    return {
-      merchant_name: null,
-      date: null,
-      total_amount: null,
-      tax_amount: null,
-      currency: 'COP',
-      category: 'Otro',
-      confidence: 0,
-      needs_review: true,
-    };
+    const result = await enrichWithGroq(rawText);
+    logger.info(`✅ Groq completado — confidence: ${result.confidence}`);
+    return result;
+  } catch (groqError: any) {
+    logger.warn(`⚠️ Groq falló (${groqError.message}), intentando Gemini...`);
   }
+
+  // Intento 2: Gemini Flash
+  try {
+    const result = await enrichWithGemini(rawText);
+    logger.info(`✅ Gemini completado — confidence: ${result.confidence}`);
+    return result;
+  } catch (geminiError: any) {
+    logger.error(`❌ Gemini también falló: ${geminiError.message}`);
+  }
+
+  // Sin LLM disponible — devolver resultado vacío para revisión manual
+  logger.error('❌ Todos los LLM fallaron — recibo marcado para revisión manual');
+  return FALLBACK_RESULT;
 };
 
 // =============================================

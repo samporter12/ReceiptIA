@@ -36,6 +36,8 @@ import express, { Application } from 'express';
       'http://localhost:19006',
       'http://localhost:3000',
       'http://localhost:19000',
+      'http://localhost:5173',   // Vite dev
+      'http://localhost:4173',   // Vite preview
       ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
     ];
     app.use(cors({
