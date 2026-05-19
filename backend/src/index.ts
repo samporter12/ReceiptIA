@@ -1,6 +1,9 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
+import { validateEnv } from './utils/validateEnv';
+validateEnv();
+
 import express, { Application } from 'express';
     import cors from 'cors';
     import helmet from 'helmet';
@@ -8,6 +11,8 @@ import express, { Application } from 'express';
     import logger from './utils/logger';
     import receiptsRouter from './functions/receipts';
     import analyticsRouter from './functions/analytics';
+    import authRouter from './functions/auth';
+    import { setupSwagger } from './swagger';
 
 
 
@@ -25,18 +30,27 @@ import express, { Application } from 'express';
     // Seguridad HTTP headers
     app.use(helmet());
 
-    // CORS (ajusta el origin en producción)
+    // CORS — en producción, leer FRONTEND_URL del entorno
+    const allowedOrigins = [
+      'http://localhost:8081',
+      'http://localhost:19006',
+      'http://localhost:3000',
+      'http://localhost:19000',
+      ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+    ];
     app.use(cors({
-  origin: [
-    'http://localhost:8081',  // Expo web
-    'http://localhost:19006', // Expo web alternativo
-    'http://localhost:3000',
-    'http://localhost:19000',
-  ],
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'apikey'],
-  credentials: true,
-}));
+      origin: (origin, callback) => {
+        // Permitir peticiones sin origin (mobile apps, Postman)
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error(`CORS: origin no permitido — ${origin}`));
+        }
+      },
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'apikey'],
+      credentials: true,
+    }));
 
 // Manejar preflight OPTIONS explícitamente
 app.options('/{*path}', cors());
@@ -84,6 +98,10 @@ app.options('/{*path}', cors());
     app.use(`${API_PREFIX}/receipts`, uploadLimiter, receiptsRouter);
     console.log('📋 API_PREFIX:', API_PREFIX);
     app.use(`${API_PREFIX}/analytics`, analyticsRouter);
+    app.use(`${API_PREFIX}/auth`, authRouter);
+
+    // REPO-42: Documentación Swagger en /api/docs
+    setupSwagger(app);
     
     // Ruta 404
     app.use((_req, res) => {

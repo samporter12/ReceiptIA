@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: receiptai-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: pnpm install && pnpm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: API_VERSION
+        value: v1
+      # Las siguientes variables se configuran manualmente en el dashboard:
+      # AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+      # S3_BUCKET_NAME
+      # SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+      # ANTHROPIC_API_KEY
+      # FRONTEND_URL (dominio de la app en producción)
