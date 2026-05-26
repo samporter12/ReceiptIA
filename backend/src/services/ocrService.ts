@@ -12,12 +12,14 @@ import logger from '../utils/logger';
 // CLIENTES
 // =============================================
 const textractClient = new TextractClient({
-  region: process.env.AWS_REGION!,
+  region: process.env.AWS_REGION!.trim(),
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!.trim(),
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!.trim(),
   },
 });
+
+const BUCKET_NAME = process.env.S3_BUCKET_NAME!.trim();
 
 // Groq — LLM principal (API compatible con OpenAI, tier gratuito)
 const groq = new OpenAI({
@@ -39,7 +41,7 @@ const CATEGORIES: ReceiptCategory[] = [
 // =============================================
 const extractWithAnalyzeExpense = async (imageKey: string): Promise<string> => {
   const command = new AnalyzeExpenseCommand({
-    Document: { S3Object: { Bucket: process.env.S3_BUCKET_NAME!, Name: imageKey } },
+    Document: { S3Object: { Bucket: BUCKET_NAME, Name: imageKey } },
   });
 
   const response = await textractClient.send(command);
@@ -72,7 +74,7 @@ const extractWithAnalyzeExpense = async (imageKey: string): Promise<string> => {
 // =============================================
 const extractWithDetectText = async (imageKey: string): Promise<string> => {
   const command = new DetectDocumentTextCommand({
-    Document: { S3Object: { Bucket: process.env.S3_BUCKET_NAME!, Name: imageKey } },
+    Document: { S3Object: { Bucket: BUCKET_NAME, Name: imageKey } },
   });
 
   const response = await textractClient.send(command);
