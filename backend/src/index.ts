@@ -60,8 +60,8 @@ import express, { Application } from 'express';
       credentials: true,
     }));
 
-// Manejar preflight OPTIONS explícitamente para todas las rutas
-app.options('*', cors());
+// Manejar preflight OPTIONS explícitamente para todas las rutas (compatible con Express 5)
+app.options('*splat', cors());
 
     // Rate limiting global
     const globalLimiter = rateLimit({
