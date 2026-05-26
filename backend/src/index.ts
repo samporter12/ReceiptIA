@@ -42,8 +42,14 @@ import express, { Application } from 'express';
     ];
     app.use(cors({
       origin: (origin, callback) => {
-        // Permitir peticiones sin origin (mobile apps, Postman)
-        if (!origin || allowedOrigins.includes(origin)) {
+        // Permitir peticiones sin origin (como mobile apps o Postman)
+        // o si el origen está explícitamente permitido, o si proviene de un despliegue de Vercel (*.vercel.app)
+        if (
+          !origin || 
+          allowedOrigins.includes(origin) || 
+          origin.endsWith('.vercel.app') ||
+          (origin.includes('.vercel.app') && !origin.includes(' '))
+        ) {
           callback(null, true);
         } else {
           callback(new Error(`CORS: origin no permitido — ${origin}`));
@@ -54,8 +60,8 @@ import express, { Application } from 'express';
       credentials: true,
     }));
 
-// Manejar preflight OPTIONS explícitamente
-app.options('/{*path}', cors());
+// Manejar preflight OPTIONS explícitamente para todas las rutas
+app.options('*', cors());
 
     // Rate limiting global
     const globalLimiter = rateLimit({
