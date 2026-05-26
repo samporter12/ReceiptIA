@@ -9,14 +9,14 @@ import { v4 as uuidv4 } from 'uuid';
 import logger from '../utils/logger';
 
 const s3Client = new S3Client({
-    region: process.env.AWS_REGION!,
+    region: process.env.AWS_REGION!.trim(),
     credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!.trim(),
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!.trim(),
     },
 });
 
-const BUCKET_NAME = process.env.S3_BUCKET_NAME!;
+const BUCKET_NAME = process.env.S3_BUCKET_NAME!.trim();
 
 // Genera una URL prefirmada para que el cliente suba directamente a S3
 export const generateUploadPresignedUrl = async (
